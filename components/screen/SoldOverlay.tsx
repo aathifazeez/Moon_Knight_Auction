@@ -169,8 +169,8 @@ export default function SoldOverlay({ player, onDismiss }: Props) {
           <div
             className="relative shrink-0 rounded-2xl overflow-hidden"
             style={{
-              width:  180,
-              height: 180,
+              width:  160,
+              height: 200,
               border: `3px solid ${accent}`,
               boxShadow: `0 0 40px ${accent}80`,
               background: "var(--color-surface)",
@@ -181,7 +181,7 @@ export default function SoldOverlay({ player, onDismiss }: Props) {
                 src={player.photo_url}
                 alt={player.name}
                 fill
-                sizes="180px"
+                sizes="160px"
                 className="object-cover"
               />
             ) : (
@@ -191,6 +191,14 @@ export default function SoldOverlay({ player, onDismiss }: Props) {
                 </span>
               </div>
             )}
+
+            {/* Bottom gradient overlay for legibility */}
+            <div
+              className="absolute inset-x-0 bottom-0 h-1/3 pointer-events-none"
+              style={{
+                background: "linear-gradient(180deg, transparent, rgba(0,0,0,0.5))",
+              }}
+            />
           </div>
 
           <div className="flex flex-col gap-3">

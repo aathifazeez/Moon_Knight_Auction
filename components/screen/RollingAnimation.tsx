@@ -1,13 +1,13 @@
 "use client";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { motion, useMotionValue, animate } from "framer-motion";
 import Image from "next/image";
 import type { Player, PlayerRole } from "@/types";
 
 const CARD_H   = 240;
 const VISIBLE  = 3;            // cards shown in frame
-const CYCLES   = 10;            // how many pool repeats before landing
-const DURATION = 2.4;           // seconds
+const CYCLES   = 25;           // how many pool repeats before landing
+const DURATION = 9.0;          // seconds
 
 const ROLE_LABEL: Record<PlayerRole, string> = {
   batsman:      "BATSMAN",
@@ -52,19 +52,20 @@ export default function RollingAnimation({ pending, pickedPlayer }: Props) {
     return result;
   }, [pending, pickedPlayer]);
 
-  const y         = useMotionValue(CARD_H);           // card 0 starts in center
-  const landingY  = CARD_H - (strip.length - 1) * CARD_H;
-  const fired     = useRef(false);
+  const y        = useMotionValue(CARD_H);   // card 0 starts in center
+  const landingY = CARD_H - (strip.length - 1) * CARD_H;
 
   useEffect(() => {
-    if (!pickedPlayer || fired.current || strip.length < 2) return;
-    fired.current = true;
+    if (!pickedPlayer || strip.length < 2) return;
+    // Reset to starting position so the reel always spins from card 0,
+    // even when React Strict Mode (dev) double-invokes this effect.
+    y.set(CARD_H);
     const controls = animate(y, landingY, {
       duration: DURATION,
-      ease:     [0.16, 0.84, 0.12, 1],
+      ease:     [0.22, 0.61, 0.36, 1],   // milder easeOut so the reel keeps moving longer
     });
     return () => controls.stop();
-  }, [pickedPlayer, landingY, strip.length, y]);
+  }, [pickedPlayer?.id, landingY, strip.length, y]);
 
   return (
     <motion.div

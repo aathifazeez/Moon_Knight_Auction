@@ -15,7 +15,7 @@ interface Props {
   initialCounts: { pending: number; sold: number; unsold: number };
 }
 
-const ROLLING_MS = 2500;
+const ROLLING_MS = 10000;
 
 const STATUS_LABEL: Record<string, string> = {
   idle:    "Idle — Ready to pick",

@@ -66,27 +66,29 @@ export default function BiddingState({ player, teams }: Props) {
           </span>
         </motion.div>
 
-        {/* Photo */}
+        {/* Photo — 4:5 portrait rectangle */}
         <motion.div
           initial={{ scale: 0.85, opacity: 0, rotateY: -10 }}
           animate={{ scale: 1, opacity: 1, rotateY: 0 }}
           transition={{ delay: 0.3, duration: 0.7, type: "spring", bounce: 0.35 }}
           className="relative"
+          style={{
+            width:  "min(380px, 32vw)",
+            height: "min(475px, 40vw)",
+          }}
         >
           {/* Outer halo */}
           <div
-            className="absolute inset-0 rounded-full -m-6"
+            className="absolute inset-0 rounded-[2rem] -m-6"
             style={{
-              background: `radial-gradient(circle, ${roleColor}40, transparent 70%)`,
+              background: `radial-gradient(ellipse at center, ${roleColor}40, transparent 70%)`,
               animation:  "mna-breathe 3s ease-in-out infinite",
             }}
           />
 
           <div
-            className="relative rounded-full overflow-hidden"
+            className="relative w-full h-full rounded-3xl overflow-hidden"
             style={{
-              width:  "min(440px, 38vw)",
-              height: "min(440px, 38vw)",
               border: `4px solid ${roleColor}`,
               boxShadow:
                 `0 0 60px ${roleColor}66, inset 0 -30px 80px rgba(0,0,0,0.5)`,
@@ -98,7 +100,7 @@ export default function BiddingState({ player, teams }: Props) {
                 src={player.photo_url}
                 alt={player.name}
                 fill
-                sizes="440px"
+                sizes="(max-width: 768px) 80vw, 380px"
                 className="object-cover"
                 priority
               />
@@ -106,17 +108,25 @@ export default function BiddingState({ player, teams }: Props) {
               <div className="flex w-full h-full items-center justify-center">
                 <span
                   className="font-display"
-                  style={{ fontSize: 180, color: roleColor }}
+                  style={{ fontSize: 200, color: roleColor }}
                 >
                   {initials}
                 </span>
               </div>
             )}
+
+            {/* Bottom gradient overlay for legibility */}
+            <div
+              className="absolute inset-x-0 bottom-0 h-1/3 pointer-events-none"
+              style={{
+                background: "linear-gradient(180deg, transparent, rgba(0,0,0,0.6))",
+              }}
+            />
           </div>
 
           {/* Floating role pill */}
           <span
-            className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-6 py-2 rounded-full font-display tracking-[0.3em] text-base whitespace-nowrap"
+            className="absolute -bottom-4 left-1/2 -translate-x-1/2 px-6 py-2 rounded-full font-display tracking-[0.3em] text-base whitespace-nowrap"
             style={{
               background: roleColor,
               color:      "#0a0e1a",
