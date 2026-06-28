@@ -10,10 +10,10 @@ export async function POST(req: NextRequest) {
   const body     = await req.json();
   const supabase = getServerSupabase();
 
-  // Get the current player up for auction
+  // Get the singleton auction_state row (need id for WHERE clause on updates)
   const { data: state } = await supabase
     .from("auction_state")
-    .select("current_player_id")
+    .select("id, current_player_id")
     .single();
 
   if (!state?.current_player_id) {
@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
         .update({ status: "unsold", team_id: null, sold_for: null })
         .eq("id", playerId),
       supabase.from("auction_state")
-        .update({ status: "idle", current_player_id: null }),
+        .update({ status: "idle", current_player_id: null })
+        .eq("id", state.id),
     ]);
     return Response.json({ success: true });
   }
@@ -57,7 +58,8 @@ export async function POST(req: NextRequest) {
     }).eq("id", team_id),
 
     supabase.from("auction_state")
-      .update({ status: "idle", current_player_id: null }),
+      .update({ status: "idle", current_player_id: null })
+      .eq("id", state.id),
   ]);
 
   return Response.json({ success: true });

@@ -50,9 +50,18 @@ export async function PATCH(req: NextRequest) {
     update.current_player_id = null;
   }
 
+  // Fetch the singleton row's ID first (Supabase requires a WHERE clause on updates)
+  const { data: existing } = await supabase
+    .from("auction_state")
+    .select("id")
+    .single();
+
+  if (!existing) return Response.json({ error: "Auction state row not found" }, { status: 404 });
+
   const { data, error } = await supabase
     .from("auction_state")
     .update(update)
+    .eq("id", existing.id)
     .select(STATE_SELECT)
     .single();
 
