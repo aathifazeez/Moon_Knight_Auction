@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
-import { Play, Gavel, XCircle, Flag, Loader2, UserCircle, RotateCcw } from "lucide-react";
+import { Play, Gavel, XCircle, Flag, Loader2, UserCircle, RotateCcw, TrendingUp, Pencil } from "lucide-react";
 import type { AuctionState, Team } from "@/types";
 import { subscribeToAuctionState } from "@/lib/supabase/realtime";
 import { formatPoints } from "@/lib/utils";
+import { getMinIncrement } from "@/lib/auction/bidding";
 import { RoleBadge } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 
@@ -51,6 +52,9 @@ export default function AuctionControl({ initialState, initialTeams, initialCoun
   const [counts,          setCounts]          = useState(initialCounts);
   const [selectedTeamId,  setSelectedTeamId]  = useState("");
   const [soldFor,         setSoldFor]         = useState("");
+  const [bidTeamId,       setBidTeamId]       = useState("");
+  const [bidAmount,       setBidAmount]       = useState("");
+  const [editPrice,       setEditPrice]       = useState(false);
   const [loading,         setLoading]         = useState(false);
   const [errorMsg,        setErrorMsg]        = useState<string | null>(null);
   const rollingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -104,16 +108,21 @@ export default function AuctionControl({ initialState, initialTeams, initialCoun
     return () => { channel.unsubscribe(); };
   }, [refreshAll]);
 
-  // When status changes to "bidding", pre-fill sold_for with base_points
+  // Pre-fill bid amount with the live next-min floor, and the override
+  // "sold_for" with the current bid so the manual path is one click away.
   useEffect(() => {
-    if (auctionState.status === "bidding" && auctionState.current_player) {
-      setSoldFor(String(auctionState.current_player.base_points));
+    if (auctionState.status === "bidding") {
+      setBidAmount(String(auctionState.next_min_bid ?? 0));
+      setSoldFor(String(auctionState.current_bid ?? auctionState.current_player?.base_points ?? 0));
     }
     if (auctionState.status === "idle") {
       setSelectedTeamId("");
       setSoldFor("");
+      setBidTeamId("");
+      setBidAmount("");
+      setEditPrice(false);
     }
-  }, [auctionState.status, auctionState.current_player]);
+  }, [auctionState.status, auctionState.current_bid, auctionState.next_min_bid, auctionState.current_player]);
 
   // Auto-transition: rolling → bidding after ROLLING_MS
   useEffect(() => {
@@ -157,6 +166,39 @@ export default function AuctionControl({ initialState, initialTeams, initialCoun
           ? { mark_unsold: true }
           : { team_id: selectedTeamId, sold_for: Number(soldFor) }
       ),
+    });
+    await refreshAll();
+    setLoading(false);
+  };
+
+  const handleRecordBid = async () => {
+    if (!bidTeamId || !bidAmount) return;
+    setLoading(true);
+    const json = await safeFetch("/api/auction/bid", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ team_id: bidTeamId, amount: Number(bidAmount) }),
+    });
+    if (json) {
+      setAuctionState(json as AuctionState);
+      // Clear selection so the next bid is a fresh choice — amount auto-refills
+      // from the new next_min_bid via the useEffect.
+      setBidTeamId("");
+    }
+    setLoading(false);
+  };
+
+  const handleSold = async () => {
+    // Override path — use selected team + manual price
+    if (editPrice) {
+      await handleAssign(false);
+      return;
+    }
+    setLoading(true);
+    await safeFetch("/api/auction/assign", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({}),  // auto-finalize from current_bid / current_bid_team
     });
     await refreshAll();
     setLoading(false);
@@ -308,88 +350,40 @@ export default function AuctionControl({ initialState, initialTeams, initialCoun
             </p>
           )}
 
-          {/* Assign form (bidding only) */}
+          {/* Bidding panels (bidding only) */}
           {isBidding && (
-            <div
-              className="rounded-xl border p-6 flex flex-col gap-5"
-              style={{ background: "var(--color-surface)", borderColor: "var(--color-border)" }}
-            >
-              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--color-text-muted)" }}>
-                Assign Player
-              </p>
+            <>
+              <LeadingBidCard
+                currentBid={auctionState.current_bid ?? 0}
+                leadingTeam={auctionState.current_bid_team_obj ?? null}
+              />
 
-              {/* Team selector */}
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--color-text-muted)" }}>
-                  Select Team
-                </label>
-                <div className="flex flex-col gap-2">
-                  {teams.map((team) => {
-                    const remaining  = team.budget - team.budget_used;
-                    const isSelected = selectedTeamId === team.id;
-                    return (
-                      <button
-                        key={team.id}
-                        type="button"
-                        onClick={() => setSelectedTeamId(team.id)}
-                        className="flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all"
-                        style={{
-                          background:  isSelected ? "rgba(245,158,11,0.1)" : "var(--color-surface-raised)",
-                          border:      `1px solid ${isSelected ? "var(--color-gold)" : "var(--color-border)"}`,
-                        }}
-                      >
-                        <span className="w-3 h-3 rounded-full shrink-0" style={{ background: team.color_hex }} />
-                        <span className="font-semibold text-sm flex-1" style={{ color: "var(--color-text)" }}>
-                          {team.name}
-                        </span>
-                        <span
-                          className="text-xs tabular-nums"
-                          style={{ color: remaining < 0 ? "var(--color-error)" : "var(--color-text-muted)" }}
-                        >
-                          {formatPoints(remaining)} pts left
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              <RecordBidPanel
+                teams={teams}
+                currentBid={auctionState.current_bid ?? 0}
+                nextMinBid={auctionState.next_min_bid ?? 0}
+                bidAmount={bidAmount}
+                bidTeamId={bidTeamId}
+                onAmountChange={setBidAmount}
+                onTeamChange={setBidTeamId}
+                onRecord={handleRecordBid}
+                loading={loading}
+              />
 
-              {/* Sold for input */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--color-text-muted)" }}>
-                  Sold For (pts)
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  value={soldFor}
-                  onChange={(e) => setSoldFor(e.target.value)}
-                  className="rounded-lg px-4 py-2.5 text-sm outline-none w-40"
-                  style={{
-                    background: "var(--color-surface-raised)",
-                    border:     "1px solid var(--color-border)",
-                    color:      "var(--color-text)",
-                  }}
-                  onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-gold)")}
-                  onBlur={(e)  => (e.currentTarget.style.borderColor = "var(--color-border)")}
-                />
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex gap-3">
-                <Button
-                  variant="primary"
-                  onClick={() => handleAssign(false)}
-                  loading={loading}
-                  disabled={!selectedTeamId || !soldFor}
-                >
-                  <Gavel size={15} /> SOLD
-                </Button>
-                <Button variant="danger" onClick={() => handleAssign(true)} loading={loading}>
-                  <XCircle size={15} /> UNSOLD
-                </Button>
-              </div>
-            </div>
+              <FinalizePanel
+                hasLeadingBid={Boolean(auctionState.current_bid_team)}
+                editPrice={editPrice}
+                onToggleEdit={() => setEditPrice((e) => !e)}
+                teams={teams}
+                selectedTeamId={selectedTeamId}
+                soldFor={soldFor}
+                onSelectedTeamChange={setSelectedTeamId}
+                onSoldForChange={setSoldFor}
+                onSold={handleSold}
+                onUnsold={() => handleAssign(true)}
+                loading={loading}
+              />
+            </>
           )}
         </div>
 
@@ -472,6 +466,299 @@ export default function AuctionControl({ initialState, initialTeams, initialCoun
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Bidding-phase sub-components
+   ─────────────────────────────────────────────────────────────── */
+
+function LeadingBidCard({
+  currentBid, leadingTeam,
+}: { currentBid: number; leadingTeam: Team | null }) {
+  return (
+    <div
+      className="rounded-xl border p-5 flex items-center justify-between gap-4"
+      style={{
+        background:  "linear-gradient(135deg, rgba(245,158,11,0.08), var(--color-surface))",
+        borderColor: "var(--color-gold-dim)",
+      }}
+    >
+      <div className="flex flex-col gap-1">
+        <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--color-gold)" }}>
+          Leading Bid
+        </p>
+        {leadingTeam ? (
+          <div className="flex items-center gap-2.5">
+            <span
+              className="w-3 h-3 rounded-full shrink-0"
+              style={{ background: leadingTeam.color_hex, boxShadow: `0 0 10px ${leadingTeam.color_hex}` }}
+            />
+            <p className="font-display tracking-wide text-lg" style={{ color: "var(--color-text)" }}>
+              {leadingTeam.name}
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
+            Awaiting first bid — base price is the floor
+          </p>
+        )}
+      </div>
+      <div className="text-right">
+        <p
+          className="font-display tabular-nums"
+          style={{ fontSize: 38, lineHeight: 1, color: "var(--color-gold-bright)" }}
+        >
+          {currentBid.toLocaleString()}
+        </p>
+        <p className="text-[10px] tracking-widest mt-1" style={{ color: "var(--color-text-subtle)" }}>
+          PTS
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function RecordBidPanel({
+  teams, currentBid, nextMinBid, bidAmount, bidTeamId,
+  onAmountChange, onTeamChange, onRecord, loading,
+}: {
+  teams: Team[];
+  currentBid: number;
+  nextMinBid: number;
+  bidAmount: string;
+  bidTeamId: string;
+  onAmountChange: (v: string) => void;
+  onTeamChange:   (id: string) => void;
+  onRecord:       () => void;
+  loading: boolean;
+}) {
+  const amount = Number(bidAmount) || 0;
+  const minInc = getMinIncrement(currentBid);
+
+  // Quick-step suggestions: the floor, +1 tier, +2 tiers
+  const quickSteps = [
+    { label: "Min",                     value: nextMinBid },
+    { label: `+${minInc.toLocaleString()}`, value: currentBid + minInc * 2 },
+    { label: `+${(minInc * 3).toLocaleString()}`, value: currentBid + minInc * 4 },
+  ].filter((s, i, arr) => s.value > currentBid && arr.findIndex((x) => x.value === s.value) === i);
+
+  return (
+    <div
+      className="rounded-xl border p-6 flex flex-col gap-5"
+      style={{ background: "var(--color-surface)", borderColor: "var(--color-border)" }}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--color-text-muted)" }}>
+          Record Next Bid
+        </p>
+        <p className="text-xs" style={{ color: "var(--color-text-subtle)" }}>
+          Minimum: <span style={{ color: "var(--color-gold)" }}>{nextMinBid.toLocaleString()} pts</span>
+        </p>
+      </div>
+
+      {/* Amount + quick chips */}
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--color-text-muted)" }}>
+          Bid Amount
+        </label>
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="number"
+            min={1}
+            value={bidAmount}
+            onChange={(e) => onAmountChange(e.target.value)}
+            className="rounded-lg px-4 py-2.5 text-sm outline-none w-40 tabular-nums"
+            style={{
+              background: "var(--color-surface-raised)",
+              border:     "1px solid var(--color-border)",
+              color:      "var(--color-text)",
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-gold)")}
+            onBlur={(e)  => (e.currentTarget.style.borderColor = "var(--color-border)")}
+          />
+          {quickSteps.map((s) => (
+            <button
+              key={s.label + s.value}
+              type="button"
+              onClick={() => onAmountChange(String(s.value))}
+              className="px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+              style={{
+                background:  amount === s.value ? "rgba(245,158,11,0.18)" : "var(--color-surface-raised)",
+                border:      `1px solid ${amount === s.value ? "var(--color-gold)" : "var(--color-border)"}`,
+                color:       amount === s.value ? "var(--color-gold-bright)" : "var(--color-text-muted)",
+              }}
+            >
+              <TrendingUp size={12} />
+              {s.label}
+              <span className="tabular-nums opacity-70">{s.value.toLocaleString()}</span>
+            </button>
+          ))}
+        </div>
+        {amount > 0 && amount < nextMinBid && (
+          <p className="text-xs" style={{ color: "var(--color-error)" }}>
+            Below minimum — needs at least {nextMinBid.toLocaleString()} pts
+          </p>
+        )}
+      </div>
+
+      {/* Team picker — disabled if team doesn't have budget for this amount */}
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--color-text-muted)" }}>
+          Bidding Team
+        </label>
+        <div className="flex flex-col gap-2">
+          {teams.map((team) => {
+            const remaining   = team.budget - team.budget_used;
+            const insufficient = amount > 0 && remaining < amount;
+            const isSelected  = bidTeamId === team.id;
+            return (
+              <button
+                key={team.id}
+                type="button"
+                disabled={insufficient}
+                onClick={() => onTeamChange(team.id)}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all disabled:cursor-not-allowed"
+                style={{
+                  background:  isSelected ? "rgba(245,158,11,0.1)" : "var(--color-surface-raised)",
+                  border:      `1px solid ${isSelected ? "var(--color-gold)" : "var(--color-border)"}`,
+                  opacity:     insufficient ? 0.4 : 1,
+                }}
+              >
+                <span className="w-3 h-3 rounded-full shrink-0" style={{ background: team.color_hex }} />
+                <span className="font-semibold text-sm flex-1" style={{ color: "var(--color-text)" }}>
+                  {team.name}
+                </span>
+                <span
+                  className="text-xs tabular-nums"
+                  style={{ color: insufficient ? "var(--color-error)" : "var(--color-text-muted)" }}
+                >
+                  {formatPoints(remaining)} left
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <Button
+        variant="primary"
+        onClick={onRecord}
+        loading={loading}
+        disabled={!bidTeamId || !bidAmount || amount < nextMinBid}
+      >
+        <TrendingUp size={15} /> Record Bid &nbsp;·&nbsp; {amount.toLocaleString()} pts
+      </Button>
+    </div>
+  );
+}
+
+function FinalizePanel({
+  hasLeadingBid, editPrice, onToggleEdit,
+  teams, selectedTeamId, soldFor,
+  onSelectedTeamChange, onSoldForChange,
+  onSold, onUnsold, loading,
+}: {
+  hasLeadingBid: boolean;
+  editPrice:     boolean;
+  onToggleEdit:  () => void;
+  teams:         Team[];
+  selectedTeamId: string;
+  soldFor:        string;
+  onSelectedTeamChange: (id: string) => void;
+  onSoldForChange:      (v: string) => void;
+  onSold:               () => void;
+  onUnsold:             () => void;
+  loading:              boolean;
+}) {
+  const overrideValid = Boolean(selectedTeamId) && Number(soldFor) > 0;
+  const canSold       = editPrice ? overrideValid : hasLeadingBid;
+
+  return (
+    <div
+      className="rounded-xl border p-6 flex flex-col gap-4"
+      style={{ background: "var(--color-surface)", borderColor: "var(--color-border)" }}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--color-text-muted)" }}>
+          Finalize
+        </p>
+        <button
+          type="button"
+          onClick={onToggleEdit}
+          className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md transition-all"
+          style={{
+            background:  editPrice ? "rgba(245,158,11,0.15)" : "transparent",
+            border:      `1px solid ${editPrice ? "var(--color-gold)" : "var(--color-border)"}`,
+            color:       editPrice ? "var(--color-gold-bright)" : "var(--color-text-muted)",
+          }}
+        >
+          <Pencil size={11} /> {editPrice ? "Manual override on" : "Edit price"}
+        </button>
+      </div>
+
+      {editPrice && (
+        <div className="flex flex-col gap-3 p-4 rounded-lg" style={{ background: "var(--color-surface-raised)" }}>
+          <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--color-text-muted)" }}>
+            Override Team
+          </label>
+          <div className="flex flex-col gap-2">
+            {teams.map((team) => {
+              const isSelected = selectedTeamId === team.id;
+              return (
+                <button
+                  key={team.id}
+                  type="button"
+                  onClick={() => onSelectedTeamChange(team.id)}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all"
+                  style={{
+                    background:  isSelected ? "rgba(245,158,11,0.1)" : "var(--color-surface)",
+                    border:      `1px solid ${isSelected ? "var(--color-gold)" : "var(--color-border)"}`,
+                  }}
+                >
+                  <span className="w-3 h-3 rounded-full shrink-0" style={{ background: team.color_hex }} />
+                  <span className="font-semibold text-sm flex-1" style={{ color: "var(--color-text)" }}>
+                    {team.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <label className="text-xs font-semibold uppercase tracking-widest mt-1" style={{ color: "var(--color-text-muted)" }}>
+            Override Price (pts)
+          </label>
+          <input
+            type="number"
+            min={1}
+            value={soldFor}
+            onChange={(e) => onSoldForChange(e.target.value)}
+            className="rounded-lg px-4 py-2.5 text-sm outline-none w-40 tabular-nums"
+            style={{
+              background: "var(--color-surface)",
+              border:     "1px solid var(--color-border)",
+              color:      "var(--color-text)",
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-gold)")}
+            onBlur={(e)  => (e.currentTarget.style.borderColor = "var(--color-border)")}
+          />
+        </div>
+      )}
+
+      <div className="flex gap-3">
+        <Button variant="primary" onClick={onSold} loading={loading} disabled={!canSold}>
+          <Gavel size={15} /> SOLD
+        </Button>
+        <Button variant="danger" onClick={onUnsold} loading={loading}>
+          <XCircle size={15} /> UNSOLD
+        </Button>
+      </div>
+
+      {!editPrice && !hasLeadingBid && (
+        <p className="text-xs" style={{ color: "var(--color-text-subtle)" }}>
+          Record at least one bid above before clicking SOLD, or toggle &quot;Edit price&quot; to enter manually.
+        </p>
+      )}
     </div>
   );
 }

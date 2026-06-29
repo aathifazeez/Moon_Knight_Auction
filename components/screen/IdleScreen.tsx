@@ -1,10 +1,8 @@
 "use client";
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
-import type { Team } from "@/types";
 
 interface Props {
-  teams: Team[];
   pendingCount: number;
   soldCount:    number;
   unsoldCount:  number;
@@ -12,7 +10,6 @@ interface Props {
 }
 
 export default function IdleScreen({
-  teams,
   pendingCount,
   soldCount,
   unsoldCount,
@@ -82,55 +79,6 @@ export default function IdleScreen({
         <StatTile label="TOTAL SPEND"    value={totalSpend}   accent="gold" suffix="pts" />
       </motion.div>
 
-      {/* Team rail */}
-      {teams.length > 0 && (
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.9, duration: 0.7 }}
-          className="w-full max-w-6xl"
-        >
-          <p
-            className="font-display text-sm tracking-[0.35em] text-center mb-5"
-            style={{ color: "var(--color-text-subtle)" }}
-          >
-            COMPETING&nbsp;TEAMS
-          </p>
-          <div
-            className="grid gap-4"
-            style={{
-              gridTemplateColumns: `repeat(${Math.min(teams.length, 4)}, minmax(0, 1fr))`,
-            }}
-          >
-            {teams.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center gap-3 px-5 py-3 rounded-xl border backdrop-blur-sm"
-                style={{
-                  background: "rgba(17, 24, 39, 0.55)",
-                  borderColor: "var(--color-border)",
-                }}
-              >
-                <span
-                  className="w-3.5 h-3.5 rounded-full shrink-0"
-                  style={{
-                    background: t.color_hex,
-                    boxShadow: `0 0 14px ${t.color_hex}80`,
-                  }}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-display tracking-wider text-lg truncate" style={{ color: "var(--color-text)" }}>
-                    {t.name}
-                  </p>
-                  <p className="text-xs" style={{ color: "var(--color-text-subtle)" }}>
-                    {(t.budget - t.budget_used).toLocaleString()} pts left
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      )}
 
     </motion.div>
   );

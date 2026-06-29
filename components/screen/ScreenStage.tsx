@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
+import Image from "next/image";
 import type { AuctionState, Player, Team } from "@/types";
 import { subscribeToAuctionState } from "@/lib/supabase/realtime";
 import StarField from "./StarField";
@@ -10,6 +11,22 @@ import BiddingState from "./BiddingState";
 import BidTicker from "./BidTicker";
 import SoldOverlay from "./SoldOverlay";
 import EndedScreen from "./EndedScreen";
+
+const STATUS_LABEL: Record<AuctionState["status"], string> = {
+  idle:    "STANDING BY",
+  rolling: "ROLLING",
+  bidding: "BIDDING OPEN",
+  sold:    "PLAYER SOLD",
+  ended:   "AUCTION ENDED",
+};
+
+const STATUS_COLOR: Record<AuctionState["status"], string> = {
+  idle:    "var(--color-text-subtle)",
+  rolling: "var(--color-gold)",
+  bidding: "var(--color-error)",
+  sold:    "var(--color-success)",
+  ended:   "var(--color-error)",
+};
 
 interface Counts {
   pending: number;
@@ -126,13 +143,15 @@ export default function ScreenStage({
     >
       <StarField />
 
+      {/* Floating top — logo + status pill (overlay, outside the grid flow) */}
+      <TopBar status={state.status} />
+
       {/* Row 1 — stage */}
       <div className="relative overflow-hidden">
         <AnimatePresence mode="wait">
           {state.status === "idle" && (
             <IdleScreen
               key="idle"
-              teams={teams}
               pendingCount={counts.pending}
               soldCount={counts.sold}
               unsoldCount={counts.unsold}
@@ -200,6 +219,60 @@ export default function ScreenStage({
         )}
       </AnimatePresence>
 
+    </div>
+  );
+}
+
+function TopBar({ status }: { status: AuctionState["status"] }) {
+  const color = STATUS_COLOR[status];
+  const label = STATUS_LABEL[status];
+  const isLive = status === "bidding" || status === "rolling";
+  return (
+    <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-8 py-3 pointer-events-none">
+
+      {/* Left — league logo */}
+      <div className="relative flex items-center" style={{ height: "clamp(40px, 5.5dvh, 64px)", width: "clamp(48px, 6.5dvh, 72px)" }}>
+        <Image
+          src="/image/IMG_3054.PNG"
+          alt="Moon Knight Super League"
+          fill
+          priority
+          sizes="72px"
+          className="object-contain"
+          style={{ filter: "drop-shadow(0 0 14px rgba(245,158,11,0.4))" }}
+        />
+      </div>
+
+      {/* Right — status pill */}
+      <div
+        className="flex items-center gap-2.5 px-4 py-1.5 rounded-full border"
+        style={{
+          background:  "rgba(17, 24, 39, 0.65)",
+          borderColor: "var(--color-border)",
+        }}
+      >
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{
+            background: color,
+            boxShadow:  isLive ? `0 0 10px ${color}` : "none",
+            animation:  isLive ? "mna-statuspulse 1.4s ease-in-out infinite" : undefined,
+          }}
+        />
+        <span
+          className="font-display tracking-[0.35em]"
+          style={{ fontSize: "clamp(10px, 1.3dvh, 13px)", color }}
+        >
+          {label}
+        </span>
+      </div>
+
+      <style>{`
+        @keyframes mna-statuspulse {
+          0%, 100% { opacity: 0.55; transform: scale(1); }
+          50%      { opacity: 1;    transform: scale(1.35); }
+        }
+      `}</style>
     </div>
   );
 }
