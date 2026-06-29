@@ -4,10 +4,10 @@ import { motion, useMotionValue, animate } from "framer-motion";
 import Image from "next/image";
 import type { Player, PlayerRole } from "@/types";
 
-const CARD_H   = 240;
-const VISIBLE  = 3;            // cards shown in frame
-const CYCLES   = 25;           // how many pool repeats before landing
-const DURATION = 9.0;          // seconds
+const CARD_H        = 240;
+const VISIBLE       = 3;     // cards shown in frame
+const TARGET_CARDS  = 30;    // aim to scroll past ~30 cards before landing
+const DURATION      = 9.0;   // seconds
 
 const ROLE_LABEL: Record<PlayerRole, string> = {
   batsman:      "BATSMAN",
@@ -31,7 +31,7 @@ interface Props {
 }
 
 export default function RollingAnimation({ pending, pickedPlayer }: Props) {
-  const strip = useMemo(() => {
+  const [strip, pickedIdx] = useMemo(() => {
     const picked: ReelPlayer | null = pickedPlayer
       ? {
           id:        pickedPlayer.id,
@@ -43,17 +43,28 @@ export default function RollingAnimation({ pending, pickedPlayer }: Props) {
 
     const others = picked ? pending.filter((p) => p.id !== picked.id) : pending;
     const pool   = others.length ? others : (picked ? [picked] : []);
+    const cycles = Math.max(3, Math.ceil(TARGET_CARDS / pool.length));
+
     const result: ReelPlayer[] = [];
-    for (let i = 0; i < CYCLES; i++) {
-      const shuffled = [...pool].sort(() => Math.random() - 0.5);
-      result.push(...shuffled);
+    for (let i = 0; i < cycles; i++) {
+      result.push(...[...pool].sort(() => Math.random() - 0.5));
     }
-    if (picked) result.push(picked);
-    return result;
+
+    // Record the exact index where the picked player lands, then add 2 buffer
+    // cards AFTER it so the slots above AND below the golden frame are filled.
+    const idx = result.length;
+    if (picked) {
+      result.push(picked);
+      const buffer = [...pool].sort(() => Math.random() - 0.5).slice(0, 2);
+      result.push(...buffer);
+    }
+
+    return [result, idx] as const;
   }, [pending, pickedPlayer]);
 
-  const y        = useMotionValue(CARD_H);   // card 0 starts in center
-  const landingY = CARD_H - (strip.length - 1) * CARD_H;
+  const y        = useMotionValue(CARD_H);
+  // Center the card at pickedIdx: y + pickedIdx * CARD_H = CARD_H → y = CARD_H(1 - pickedIdx)
+  const landingY = pickedPlayer ? CARD_H - pickedIdx * CARD_H : CARD_H;
 
   useEffect(() => {
     if (!pickedPlayer || strip.length < 2) return;
@@ -162,8 +173,13 @@ export default function RollingAnimation({ pending, pickedPlayer }: Props) {
           })}
         </div>
 
-        {/* Strip */}
-        <motion.div style={{ y }} className="absolute left-0 right-0 top-0">
+        {/* Strip — flex column so vertical margins between cards do NOT
+            collapse. Without this, each adjacent margin pair collapses from
+            16px to 8px and the picked card lands one slot off-center. */}
+        <motion.div
+          style={{ y }}
+          className="absolute left-0 right-0 top-0 flex flex-col"
+        >
           {strip.map((player, i) => (
             <ReelCard key={`${player.id}-${i}`} player={player} />
           ))}

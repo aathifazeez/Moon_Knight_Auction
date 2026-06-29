@@ -22,7 +22,7 @@ export default function IdleScreen({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.6 }}
-      className="relative z-10 flex flex-col items-center justify-center h-full w-full overflow-hidden px-12 py-12"
+      className="relative z-10 flex flex-col items-center justify-center h-full w-full overflow-hidden px-12 py-12 pt-24"
     >
       {/* Hero */}
       <motion.div
