@@ -42,7 +42,7 @@ export default function Sidebar() {
           className="font-display text-2xl leading-none"
           style={{ color: "var(--color-gold)" }}
         >
-          MOON NIGHT
+          MOON KNIGHT
         </h1>
         <p
           className="text-[10px] uppercase tracking-[0.2em] mt-0.5"
