@@ -169,7 +169,7 @@ export default function DownloadPdfButton({ teams, sold, unsold, totalSpend }: P
               doc.setFont("helvetica", "bold");
               doc.setFontSize(7);
               doc.setTextColor(...muted);
-              doc.text("MOON KNIGHT SUPER LEAGUE — AUCTION RESULTS", W / 2, 7, { align: "center" });
+              doc.text("MOONKNIGHT SUPER LEAGUE — AUCTION RESULTS", W / 2, 7, { align: "center" });
             },
           });
           y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;

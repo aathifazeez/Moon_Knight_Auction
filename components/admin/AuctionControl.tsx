@@ -171,20 +171,17 @@ export default function AuctionControl({ initialState, initialTeams, initialCoun
     setLoading(false);
   };
 
-  const handleRecordBid = async () => {
-    if (!bidTeamId || !bidAmount) return;
+  const handleRecordBid = async (teamId: string) => {
+    if (!teamId || !bidAmount) return;
+    setBidTeamId(teamId);
     setLoading(true);
     const json = await safeFetch("/api/auction/bid", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ team_id: bidTeamId, amount: Number(bidAmount) }),
+      body:    JSON.stringify({ team_id: teamId, amount: Number(bidAmount) }),
     });
-    if (json) {
-      setAuctionState(json as AuctionState);
-      // Clear selection so the next bid is a fresh choice — amount auto-refills
-      // from the new next_min_bid via the useEffect.
-      setBidTeamId("");
-    }
+    if (json) setAuctionState(json as AuctionState);
+    setBidTeamId("");
     setLoading(false);
   };
 
@@ -363,9 +360,8 @@ export default function AuctionControl({ initialState, initialTeams, initialCoun
                 currentBid={auctionState.current_bid ?? 0}
                 nextMinBid={auctionState.next_min_bid ?? 0}
                 bidAmount={bidAmount}
-                bidTeamId={bidTeamId}
+                pendingTeamId={bidTeamId}
                 onAmountChange={setBidAmount}
-                onTeamChange={setBidTeamId}
                 onRecord={handleRecordBid}
                 loading={loading}
               />
@@ -521,21 +517,21 @@ function LeadingBidCard({
 }
 
 function RecordBidPanel({
-  teams, currentBid, nextMinBid, bidAmount, bidTeamId,
-  onAmountChange, onTeamChange, onRecord, loading,
+  teams, currentBid, nextMinBid, bidAmount, pendingTeamId,
+  onAmountChange, onRecord, loading,
 }: {
   teams: Team[];
   currentBid: number;
   nextMinBid: number;
   bidAmount: string;
-  bidTeamId: string;
+  pendingTeamId: string;
   onAmountChange: (v: string) => void;
-  onTeamChange:   (id: string) => void;
-  onRecord:       () => void;
+  onRecord:       (teamId: string) => void;
   loading: boolean;
 }) {
   const amount = Number(bidAmount) || 0;
   const minInc = getMinIncrement(currentBid);
+  const amountValid = amount >= nextMinBid;
 
   // Quick-step suggestions: the floor, +1 tier, +2 tiers
   const quickSteps = [
@@ -596,60 +592,57 @@ function RecordBidPanel({
             </button>
           ))}
         </div>
-        {amount > 0 && amount < nextMinBid && (
+        {amount > 0 && !amountValid && (
           <p className="text-xs" style={{ color: "var(--color-error)" }}>
             Below minimum — needs at least {nextMinBid.toLocaleString()} pts
           </p>
         )}
       </div>
 
-      {/* Team picker — disabled if team doesn't have budget for this amount */}
+      {/* Team picker — click a team to instantly record the bid */}
       <div className="flex flex-col gap-2">
         <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--color-text-muted)" }}>
-          Bidding Team
+          Tap Team to Record Bid &nbsp;·&nbsp;{" "}
+          <span style={{ color: "var(--color-gold)" }}>{amount.toLocaleString()} pts</span>
         </label>
         <div className="flex flex-col gap-2">
           {teams.map((team) => {
             const remaining   = team.budget - team.budget_used;
             const insufficient = amount > 0 && remaining < amount;
-            const isSelected  = bidTeamId === team.id;
+            const disabled    = !amountValid || insufficient || loading;
+            const isPending   = pendingTeamId === team.id && loading;
             return (
               <button
                 key={team.id}
                 type="button"
-                disabled={insufficient}
-                onClick={() => onTeamChange(team.id)}
+                disabled={disabled}
+                onClick={() => onRecord(team.id)}
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all disabled:cursor-not-allowed"
                 style={{
-                  background:  isSelected ? "rgba(245,158,11,0.1)" : "var(--color-surface-raised)",
-                  border:      `1px solid ${isSelected ? "var(--color-gold)" : "var(--color-border)"}`,
-                  opacity:     insufficient ? 0.4 : 1,
+                  background:  isPending ? "rgba(245,158,11,0.18)" : "var(--color-surface-raised)",
+                  border:      `1px solid ${isPending ? "var(--color-gold)" : "var(--color-border)"}`,
+                  opacity:     insufficient || !amountValid ? 0.4 : 1,
                 }}
               >
                 <span className="w-3 h-3 rounded-full shrink-0" style={{ background: team.color_hex }} />
                 <span className="font-semibold text-sm flex-1" style={{ color: "var(--color-text)" }}>
                   {team.name}
                 </span>
-                <span
-                  className="text-xs tabular-nums"
-                  style={{ color: insufficient ? "var(--color-error)" : "var(--color-text-muted)" }}
-                >
-                  {formatPoints(remaining)} left
-                </span>
+                {isPending ? (
+                  <Loader2 size={14} className="animate-spin" style={{ color: "var(--color-gold)" }} />
+                ) : (
+                  <span
+                    className="text-xs tabular-nums"
+                    style={{ color: insufficient ? "var(--color-error)" : "var(--color-text-muted)" }}
+                  >
+                    {formatPoints(remaining)} left
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
       </div>
-
-      <Button
-        variant="primary"
-        onClick={onRecord}
-        loading={loading}
-        disabled={!bidTeamId || !bidAmount || amount < nextMinBid}
-      >
-        <TrendingUp size={15} /> Record Bid &nbsp;·&nbsp; {amount.toLocaleString()} pts
-      </Button>
     </div>
   );
 }

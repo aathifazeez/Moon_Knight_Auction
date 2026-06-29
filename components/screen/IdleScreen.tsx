@@ -51,7 +51,7 @@ export default function IdleScreen({
             WebkitTextFillColor:  "transparent",
           }}
         >
-          MOON&nbsp;KNIGHT<br />SUPER&nbsp;LEAGUE
+          MOONKNIGHT<br />SUPER&nbsp;LEAGUE
         </motion.h1>
 
         <div className="flex items-center gap-3 mt-2">
