@@ -7,6 +7,7 @@ import StarField from "./StarField";
 import IdleScreen from "./IdleScreen";
 import RollingAnimation, { type ReelPlayer } from "./RollingAnimation";
 import BiddingState from "./BiddingState";
+import BidTicker from "./BidTicker";
 import SoldOverlay from "./SoldOverlay";
 import EndedScreen from "./EndedScreen";
 
@@ -168,12 +169,25 @@ export default function ScreenStage({
         </AnimatePresence>
       </div>
 
-      {/* Row 2 — footer slot. BidTicker lands here in Phase 4. */}
-      <Footer
-        status={state.status}
-        pendingCount={counts.pending}
-        totalSpend={spend}
-      />
+      {/* Row 2 — footer slot. Live BidTicker during bidding, status ticker otherwise. */}
+      <AnimatePresence mode="wait">
+        {state.status === "bidding" && state.current_player ? (
+          <BidTicker
+            key="bid-ticker"
+            player={state.current_player}
+            currentBid={state.current_bid ?? 0}
+            leadingTeam={state.current_bid_team_obj ?? null}
+            nextMinBid={state.next_min_bid ?? 0}
+          />
+        ) : (
+          <Footer
+            key="default-footer"
+            status={state.status}
+            pendingCount={counts.pending}
+            totalSpend={spend}
+          />
+        )}
+      </AnimatePresence>
 
       {/* SoldOverlay — fixed full-viewport, lives outside the grid */}
       <AnimatePresence>
