@@ -7,7 +7,7 @@ import type { Player, PlayerRole } from "@/types";
 const CARD_H        = 240;
 const VISIBLE       = 3;     // cards shown in frame
 const TARGET_CARDS  = 30;    // aim to scroll past ~30 cards before landing
-const DURATION      = 9.0;   // seconds
+const DURATION      = 3.5;   // seconds
 
 const ROLE_LABEL: Record<PlayerRole, string> = {
   batsman:      "BATSMAN",
