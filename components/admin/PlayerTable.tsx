@@ -39,6 +39,18 @@ export default function PlayerTable({ players }: Props) {
   const [deleting, setDeleting]         = useState(false);
   const [showResetAll, setShowResetAll] = useState(false);
   const [resettingAll, setResettingAll] = useState(false);
+  const [resettingId, setResettingId]   = useState<string | null>(null);
+
+  const handleResetOne = async (id: string) => {
+    setResettingId(id);
+    await fetch(`/api/players/${id}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ status: "pending", team_id: null, sold_for: null, auction_order: null }),
+    });
+    setResettingId(null);
+    router.refresh();
+  };
 
   const handleResetAll = async () => {
     setResettingAll(true);
@@ -217,6 +229,19 @@ export default function PlayerTable({ players }: Props) {
                           <Pencil size={14} />
                         </button>
                       </Link>
+                      {player.status === "unsold" && (
+                        <button
+                          onClick={() => handleResetOne(player.id)}
+                          disabled={resettingId === player.id}
+                          title="Move back to Pending"
+                          className="p-1.5 rounded-lg transition-colors disabled:opacity-50"
+                          style={{ color: "var(--color-text-muted)" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--color-gold)"; e.currentTarget.style.background = "rgba(245,158,11,0.1)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--color-text-muted)"; e.currentTarget.style.background = "transparent"; }}
+                        >
+                          <RotateCcw size={14} className={resettingId === player.id ? "animate-spin" : ""} />
+                        </button>
+                      )}
                       <button
                         onClick={() => setDeleteTarget(player)}
                         className="p-1.5 rounded-lg transition-colors"
